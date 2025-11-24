@@ -1,13 +1,18 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
+import { supabase } from '../lib/supabase';
+import { useAuth } from './AuthContext';
 import { EmotionEntry, Emotion } from '../utils/emotionData';
 
 interface EmotionContextType {
   entries: EmotionEntry[];
-  addEntry: (emotion: Emotion, note?: string, image?: string) => void;
-  updateEntry: (id: string, updates: Partial<EmotionEntry>) => void;
-  deleteEntry: (id: string) => void;
+  isLoading: boolean;
+  error: string | null;
+  addEntry: (emotion: Emotion, note?: string, image?: string) => Promise<void>;
+  updateEntry: (id: string, updates: Partial<EmotionEntry>) => Promise<void>;
+  deleteEntry: (id: string) => Promise<void>;
   getEntriesForDate: (date: Date) => EmotionEntry[];
   getRecentEntries: (limit?: number) => EmotionEntry[];
+  loadEntries: () => Promise<void>;
 }
 
 const EmotionContext = createContext<EmotionContextType | undefined>(undefined);
@@ -21,42 +26,149 @@ export const useEmotion = () => {
 };
 
 export const EmotionProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const [entries, setEntries] = useState<EmotionEntry[]>(() => {
-    const saved = localStorage.getItem('emotionEntries');
-    if (saved) {
-      const parsed = JSON.parse(saved);
-      return parsed.map((entry: any) => ({
-        ...entry,
-        timestamp: new Date(entry.timestamp)
-      }));
+  const { supabaseUser } = useAuth();
+  const [entries, setEntries] = useState<EmotionEntry[]>([]);
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const loadEntries = async () => {
+    if (!supabaseUser) {
+      setEntries([]);
+      return;
     }
-    return [];
-  });
+
+    setIsLoading(true);
+    setError(null);
+    try {
+      const { data, error: dbError } = await supabase
+        .from('emotion_entries')
+        .select('*')
+        .eq('user_id', supabaseUser.id)
+        .order('created_at', { ascending: false });
+
+      if (dbError) throw dbError;
+
+      const transformedEntries: EmotionEntry[] = (data || []).map(entry => ({
+        id: entry.id,
+        emotion: entry.emotion as Emotion,
+        timestamp: new Date(entry.created_at),
+        note: entry.note,
+        intensity: entry.intensity
+      }));
+
+      setEntries(transformedEntries);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Failed to load emotion entries';
+      setError(message);
+      console.error('Emotion load error:', err);
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
   useEffect(() => {
-    localStorage.setItem('emotionEntries', JSON.stringify(entries));
-  }, [entries]);
+    loadEntries();
+  }, [supabaseUser?.id]);
 
-  const addEntry = (emotion: Emotion, note?: string, image?: string) => {
-    const newEntry: EmotionEntry = {
-      id: Date.now().toString(),
-      emotion,
-      timestamp: new Date(),
-      note,
-      image,
-    };
-    
-    setEntries(prev => [newEntry, ...prev]);
+  const addEntry = async (emotion: Emotion, note: string = '', image?: string) => {
+    if (!supabaseUser) throw new Error('Not authenticated');
+
+    setError(null);
+    try {
+      const { data, error: dbError } = await supabase
+        .from('emotion_entries')
+        .insert([{
+          user_id: supabaseUser.id,
+          emotion,
+          note,
+          intensity: 5,
+          created_at: new Date().toISOString()
+        }])
+        .select()
+        .single();
+
+      if (dbError) throw dbError;
+
+      if (data) {
+        const newEntry: EmotionEntry = {
+          id: data.id,
+          emotion: data.emotion as Emotion,
+          timestamp: new Date(data.created_at),
+          note: data.note,
+          intensity: data.intensity
+        };
+
+        setEntries(prev => [newEntry, ...prev]);
+      }
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Failed to add emotion entry';
+      setError(message);
+      throw err;
+    }
   };
 
-  const updateEntry = (id: string, updates: Partial<EmotionEntry>) => {
-    setEntries(prev => prev.map(entry => 
-      entry.id === id ? { ...entry, ...updates } : entry
-    ));
+  const updateEntry = async (id: string, updates: Partial<EmotionEntry>) => {
+    if (!supabaseUser) throw new Error('Not authenticated');
+
+    setError(null);
+    try {
+      const updateData: any = {};
+      if (updates.emotion) updateData.emotion = updates.emotion;
+      if (updates.note !== undefined) updateData.note = updates.note;
+      if (updates.intensity !== undefined) updateData.intensity = updates.intensity;
+
+      updateData.updated_at = new Date().toISOString();
+
+      const { data, error: dbError } = await supabase
+        .from('emotion_entries')
+        .update(updateData)
+        .eq('id', id)
+        .eq('user_id', supabaseUser.id)
+        .select()
+        .maybeSingle();
+
+      if (dbError) throw dbError;
+
+      if (data) {
+        setEntries(prev =>
+          prev.map(entry =>
+            entry.id === id
+              ? {
+                  ...entry,
+                  emotion: data.emotion as Emotion,
+                  note: data.note,
+                  intensity: data.intensity
+                }
+              : entry
+          )
+        );
+      }
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Failed to update emotion entry';
+      setError(message);
+      throw err;
+    }
   };
 
-  const deleteEntry = (id: string) => {
-    setEntries(prev => prev.filter(entry => entry.id !== id));
+  const deleteEntry = async (id: string) => {
+    if (!supabaseUser) throw new Error('Not authenticated');
+
+    setError(null);
+    try {
+      const { error: dbError } = await supabase
+        .from('emotion_entries')
+        .delete()
+        .eq('id', id)
+        .eq('user_id', supabaseUser.id);
+
+      if (dbError) throw dbError;
+
+      setEntries(prev => prev.filter(entry => entry.id !== id));
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Failed to delete emotion entry';
+      setError(message);
+      throw err;
+    }
   };
 
   const getEntriesForDate = (date: Date) => {
@@ -71,11 +183,14 @@ export const EmotionProvider: React.FC<{ children: React.ReactNode }> = ({ child
   return (
     <EmotionContext.Provider value={{
       entries,
+      isLoading,
+      error,
       addEntry,
       updateEntry,
       deleteEntry,
       getEntriesForDate,
-      getRecentEntries
+      getRecentEntries,
+      loadEntries
     }}>
       {children}
     </EmotionContext.Provider>

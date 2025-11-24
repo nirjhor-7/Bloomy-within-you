@@ -9,40 +9,36 @@ const Auth: React.FC = () => {
   const [formData, setFormData] = useState({
     email: '',
     password: '',
-    username: '',
-    displayName: ''
+    full_name: ''
   });
   const [error, setError] = useState('');
-  
+
   const { login, signup, isLoading } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
-  
+
   const from = location.state?.from?.pathname || '/';
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
-    
-    if (isLogin) {
-      const success = await login(formData.email, formData.password);
-      if (success) {
+
+    try {
+      if (isLogin) {
+        await login(formData.email, formData.password);
         navigate(from, { replace: true });
       } else {
-        setError('Invalid email or password');
-      }
-    } else {
-      if (!formData.username || !formData.displayName) {
-        setError('Please fill in all fields');
-        return;
-      }
-      
-      const success = await signup(formData.email, formData.password, formData.username, formData.displayName);
-      if (success) {
+        if (!formData.full_name) {
+          setError('Please enter your name');
+          return;
+        }
+
+        await signup(formData.email, formData.password, formData.full_name);
         navigate(from, { replace: true });
-      } else {
-        setError('User already exists or invalid data');
       }
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'An error occurred';
+      setError(message);
     }
   };
 
@@ -56,7 +52,6 @@ const Auth: React.FC = () => {
   return (
     <div className="min-h-screen bg-black text-white flex items-center justify-center p-4">
       <div className="max-w-md w-full">
-        {/* Logo */}
         <div className="text-center mb-8">
           <Link to="/" className="inline-flex items-center gap-3 group">
             <div className="relative">
@@ -70,7 +65,6 @@ const Auth: React.FC = () => {
           <p className="text-gray-400 mt-2">Your compassionate wellness companion</p>
         </div>
 
-        {/* Auth Form */}
         <div className="dark-card rounded-3xl p-8">
           <div className="text-center mb-6">
             <h1 className="text-2xl font-serif font-light text-white mb-2">
@@ -82,13 +76,12 @@ const Auth: React.FC = () => {
           </div>
 
           {error && (
-            <div className="bg-red-900/50 border border-red-500/50 rounded-2xl p-4 mb-6 text-red-200">
+            <div className="bg-red-900/50 border border-red-500/50 rounded-2xl p-4 mb-6 text-red-200 text-sm">
               {error}
             </div>
           )}
 
           <form onSubmit={handleSubmit} className="space-y-6">
-            {/* Email */}
             <div>
               <label htmlFor="email" className="block text-gray-300 font-medium mb-2">
                 Email
@@ -108,43 +101,20 @@ const Auth: React.FC = () => {
               </div>
             </div>
 
-            {/* Username (signup only) */}
             {!isLogin && (
               <div>
-                <label htmlFor="username" className="block text-gray-300 font-medium mb-2">
-                  Username
-                </label>
-                <div className="relative">
-                  <User className="absolute left-4 top-1/2 transform -translate-y-1/2 h-5 w-5 text-gray-400" />
-                  <input
-                    type="text"
-                    id="username"
-                    name="username"
-                    value={formData.username}
-                    onChange={handleInputChange}
-                    placeholder="Choose a username"
-                    className="w-full dark-input pl-12 pr-4 py-4 rounded-2xl focus:outline-none focus:border-purple-500 transition-colors"
-                    required={!isLogin}
-                  />
-                </div>
-              </div>
-            )}
-
-            {/* Display Name (signup only) */}
-            {!isLogin && (
-              <div>
-                <label htmlFor="displayName" className="block text-gray-300 font-medium mb-2">
-                  Display Name
+                <label htmlFor="full_name" className="block text-gray-300 font-medium mb-2">
+                  Full Name
                 </label>
                 <div className="relative">
                   <Sparkles className="absolute left-4 top-1/2 transform -translate-y-1/2 h-5 w-5 text-gray-400" />
                   <input
                     type="text"
-                    id="displayName"
-                    name="displayName"
-                    value={formData.displayName}
+                    id="full_name"
+                    name="full_name"
+                    value={formData.full_name}
                     onChange={handleInputChange}
-                    placeholder="Your display name"
+                    placeholder="Your full name"
                     className="w-full dark-input pl-12 pr-4 py-4 rounded-2xl focus:outline-none focus:border-purple-500 transition-colors"
                     required={!isLogin}
                   />
@@ -152,7 +122,6 @@ const Auth: React.FC = () => {
               </div>
             )}
 
-            {/* Password */}
             <div>
               <label htmlFor="password" className="block text-gray-300 font-medium mb-2">
                 Password
@@ -179,7 +148,6 @@ const Auth: React.FC = () => {
               </div>
             </div>
 
-            {/* Submit Button */}
             <button
               type="submit"
               disabled={isLoading}
@@ -199,7 +167,6 @@ const Auth: React.FC = () => {
             </button>
           </form>
 
-          {/* Toggle Auth Mode */}
           <div className="text-center mt-6">
             <p className="text-gray-400">
               {isLogin ? "Don't have an account?" : 'Already have an account?'}
@@ -207,7 +174,7 @@ const Auth: React.FC = () => {
                 onClick={() => {
                   setIsLogin(!isLogin);
                   setError('');
-                  setFormData({ email: '', password: '', username: '', displayName: '' });
+                  setFormData({ email: '', password: '', full_name: '' });
                 }}
                 className="text-purple-400 hover:text-purple-300 font-medium ml-2 transition-colors"
               >
@@ -215,15 +182,6 @@ const Auth: React.FC = () => {
               </button>
             </p>
           </div>
-
-          {/* Demo Credentials */}
-          {isLogin && (
-            <div className="mt-6 p-4 bg-gray-800/50 rounded-2xl border border-gray-700">
-              <p className="text-sm text-gray-400 mb-2">Demo credentials:</p>
-              <p className="text-sm text-gray-300">Email: alice@example.com</p>
-              <p className="text-sm text-gray-300">Password: password</p>
-            </div>
-          )}
         </div>
       </div>
     </div>
