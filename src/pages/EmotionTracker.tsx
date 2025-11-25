@@ -8,6 +8,7 @@ const EmotionTracker: React.FC = () => {
   const [selectedEmotion, setSelectedEmotion] = useState<Emotion | null>(null);
   const [note, setNote] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
+  const [isSaving, setIsSaving] = useState(false);
   const { entries, addEntry, getRecentEntries } = useEmotion();
 
   const filteredEmotions = emotions.filter(emotion =>
@@ -19,12 +20,19 @@ const EmotionTracker: React.FC = () => {
     setView('checkin');
   };
 
-  const handleSaveEntry = () => {
+  const handleSaveEntry = async () => {
     if (selectedEmotion) {
-      addEntry(selectedEmotion, note);
-      setNote('');
-      setSelectedEmotion(null);
-      setView('journal');
+      setIsSaving(true);
+      try {
+        await addEntry(selectedEmotion, note);
+        setNote('');
+        setSelectedEmotion(null);
+        setView('journal');
+      } catch (err) {
+        console.error('Failed to save emotion entry:', err);
+      } finally {
+        setIsSaving(false);
+      }
     }
   };
 
@@ -181,9 +189,10 @@ const EmotionTracker: React.FC = () => {
               </button>
               <button
                 onClick={handleSaveEntry}
-                className="flex-1 bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 text-white py-4 rounded-2xl font-medium transition-all duration-300"
+                disabled={isSaving}
+                className="flex-1 bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 text-white py-4 rounded-2xl font-medium transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed"
               >
-                Save Entry
+                {isSaving ? 'Saving...' : 'Save Entry'}
               </button>
             </div>
           </div>
